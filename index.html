@@ -3,54 +3,139 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Juego Canvas - Colisiones Mouse</title>
+  <title>Retro Canvas Game</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
 
-  <header class="topbar">
-    <h1>Canvas Game: Hover + Click Fade + Niveles</h1>
-    <p>Pasa el mouse para cambiar color. Haz clic para desaparecerlos.</p>
-  </header>
+  <nav class="navbar">
+    <div class="brand">
+      <span class="logo-dot"></span>
+      <span>RETRO CANVAS GAME</span>
+    </div>
 
-  <main class="container">
-    <section class="hud">
-      <div class="hud-item">
-        <span class="label">Nivel</span>
-        <span id="levelText" class="value">1</span>
+    <div class="nav-right">
+      <span class="pill">Hover = Color</span>
+      <span class="pill">Click = Fade</span>
+      <button id="resetBtn" class="btn btn-neon">RESET</button>
+    </div>
+  </nav>
+
+  <main class="layout">
+    <!-- LEFT: GAME -->
+    <section class="game-card">
+      <div class="card-title">
+        <span class="title-glow">ARENA</span>
+        <span class="sub">Salen por abajo, rebotan laterales, si pasan por arriba = escapan.</span>
       </div>
 
-      <div class="hud-item">
-        <span class="label">Eliminados</span>
-        <span id="removedText" class="value">0</span>
+      <div class="canvas-wrap">
+        <!-- ✅ SOLO ESTE CANVAS -->
+        <canvas id="gameCanvas" width="980" height="540"></canvas>
+        <div class="scanlines"></div>
       </div>
 
-      <div class="hud-item">
-        <span class="label">% Eliminados</span>
-        <span id="percentText" class="value">0%</span>
-      </div>
-
-      <div class="hud-item">
-        <span class="label">Progreso nivel</span>
-        <span id="levelProgressText" class="value">0/10</span>
-      </div>
-
-      <div class="hud-item">
-        <span class="label">En pantalla</span>
-        <span id="aliveText" class="value">10</span>
-      </div>
-    </section>
-
-    <section class="stage">
-      <canvas id="gameCanvas" width="980" height="520"></canvas>
-      <div class="tips">
-        <strong>Reglas:</strong> salen desde abajo, suben, rebotan en laterales; si salen por arriba, se eliminan.
+      <div class="legend">
+        <span class="dot pink"></span> hover
+        <span class="dot cyan"></span> normal
+        <span class="dot yellow"></span> click fade
       </div>
     </section>
+
+    <!-- RIGHT: HUD + CONTROLS -->
+    <aside class="side-card">
+      <div class="card-title">
+        <span class="title-glow">PANEL</span>
+        <span class="sub">Configura y juega.</span>
+      </div>
+
+      <section class="hud">
+        <div class="hud-item">
+          <div class="label">Nivel</div>
+          <div id="levelText" class="value">1</div>
+        </div>
+
+        <div class="hud-item">
+          <div class="label">En pantalla</div>
+          <div id="aliveText" class="value">0</div>
+        </div>
+
+        <div class="hud-item">
+          <div class="label">Eliminados</div>
+          <div id="removedText" class="value">0</div>
+        </div>
+
+        <div class="hud-item">
+          <div class="label">% Eliminados</div>
+          <div id="percentRemovedText" class="value">0%</div>
+        </div>
+
+        <div class="hud-item">
+          <div class="label">Progreso nivel</div>
+          <div id="levelProgressText" class="value">0/10</div>
+        </div>
+
+        <div class="hud-item">
+          <div class="label">Total objetivo</div>
+          <div id="targetText" class="value">100</div>
+        </div>
+
+        <div class="hud-item hud-item-danger">
+          <div class="label">Escaparon</div>
+          <div id="escapedText" class="value">0</div>
+        </div>
+
+        <div class="hud-item hud-item-danger">
+          <div class="label">% Escaparon</div>
+          <div id="percentEscapedText" class="value">0%</div>
+        </div>
+      </section>
+
+      <section class="controls">
+        <div class="control-block">
+          <div class="control-title">Grupo por nivel</div>
+          <div class="control-row">
+            <input id="groupSlider" type="range" min="10" max="20" step="5" value="10">
+            <div class="mini">
+              <span>10</span><span>15</span><span>20</span>
+            </div>
+          </div>
+          <div class="control-hint">
+            Valor actual: <span id="groupValue" class="mono">10</span> por nivel
+          </div>
+        </div>
+
+        <div class="control-block">
+          <div class="control-title">Total de objetos</div>
+          <div class="circle-buttons">
+            <button class="circle-btn" data-target="100">100</button>
+            <button class="circle-btn" data-target="150">150</button>
+            <button class="circle-btn" data-target="200">200</button>
+          </div>
+          <div class="control-hint">
+            (Se generan por niveles hasta llegar al objetivo)
+          </div>
+        </div>
+
+        <div class="control-block">
+          <div class="control-title">Estado</div>
+          <div id="statusText" class="status">Listo.</div>
+        </div>
+      </section>
+    </aside>
   </main>
 
   <footer class="footer">
-    <small>Álvaro • Canvas + JS • Versión tipo juego</small>
+    <div class="footer-inner">
+      <span>Álvaro • Canvas + JS • Retro UI</span>
+      <span class="sep">|</span>
+      <span class="muted">Tip: si los dejas escapar por arriba cuenta como “Escaparon”.</span>
+    </div>
   </footer>
 
   <script src="game.js"></script>

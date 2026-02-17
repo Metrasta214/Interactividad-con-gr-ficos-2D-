@@ -1,234 +1,288 @@
-/*************************************************************
- * Juego Canvas: Hover cambia color + Click fade out
- * - Circulos salen desde abajo (fuera del canvas)
- * - Se mueven de abajo hacia arriba lentamente
- * - Rebotan en laterales
- * - Se eliminan al pasar por arriba
- * - Niveles: grupos de 10 eliminados = sube nivel y velocidad
- *************************************************************/
+document.addEventListener("DOMContentLoaded", () => {
+  // --- Helpers ---
+  const $ = (id) => document.getElementById(id);
+  const must = (el, name) => {
+    if (!el) console.error(`❌ No encontré el elemento: ${name}`);
+    return el;
+  };
 
-const canvas = document.getElementById("gameCanvas");
-const ctx = canvas.getContext("2d");
+  // --- Canvas ---
+  const canvas = must($("gameCanvas"), "canvas#gameCanvas");
+  if (!canvas) return;
 
-// HUD
-const levelText = document.getElementById("levelText");
-const removedText = document.getElementById("removedText");
-const percentText = document.getElementById("percentText");
-const levelProgressText = document.getElementById("levelProgressText");
-const aliveText = document.getElementById("aliveText");
-
-// Estado de mouse
-const mouse = { x: -9999, y: -9999, down: false };
-
-// Config juego
-const LEVEL_SIZE = 10;
-
-// Velocidades base (se escalan por nivel)
-const BASE_SPEED_UP_MIN = 0.55;
-const BASE_SPEED_UP_MAX = 1.05;
-const BASE_SPEED_SIDE_MIN = 0.25;
-const BASE_SPEED_SIDE_MAX = 0.95;
-
-// Fade out (clic)
-const FADE_SPEED = 0.02; // más alto = desaparece más rápido
-
-// Estado del juego
-let circles = [];
-let level = 1;
-
-let totalSpawned = 0;
-let removedTotal = 0;
-
-let removedThisLevel = 0;
-
-// Util
-function rand(min, max) {
-  return Math.random() * (max - min) + min;
-}
-
-function clamp(v, min, max) {
-  return Math.max(min, Math.min(max, v));
-}
-
-// Clase Circulo
-class Circle {
-  constructor() {
-    this.r = rand(16, 30);
-    this.x = rand(this.r + 4, canvas.width - this.r - 4);
-
-    // Nace estrictamente desde abajo, fuera del canvas (y > height)
-    this.y = canvas.height + this.r + rand(10, 120);
-
-    // Movimiento aleatorio: vx puede ser izq/der; vy siempre hacia arriba
-    this.vx = rand(BASE_SPEED_SIDE_MIN, BASE_SPEED_SIDE_MAX) * (Math.random() < 0.5 ? -1 : 1);
-    this.vy = -rand(BASE_SPEED_UP_MIN, BASE_SPEED_UP_MAX);
-
-    // Estado visual
-    this.baseColor = "rgba(90, 160, 255, 1)";
-    this.hoverColor = "rgba(255, 120, 180, 1)";
-    this.alpha = 1;
-
-    this.isFading = false;
-    this.isHovered = false;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    console.error("❌ No se pudo obtener el contexto 2D del canvas.");
+    return;
   }
 
-  containsPoint(px, py) {
-    const dx = px - this.x;
-    const dy = py - this.y;
-    return (dx * dx + dy * dy) <= this.r * this.r;
+  // --- HUD ---
+  const levelText = must($("levelText"), "#levelText");
+  const aliveText = must($("aliveText"), "#aliveText");
+  const removedText = must($("removedText"), "#removedText");
+  const percentRemovedText = must($("percentRemovedText"), "#percentRemovedText");
+  const levelProgressText = must($("levelProgressText"), "#levelProgressText");
+  const targetText = must($("targetText"), "#targetText");
+  const escapedText = must($("escapedText"), "#escapedText");
+  const percentEscapedText = must($("percentEscapedText"), "#percentEscapedText");
+  const statusText = must($("statusText"), "#statusText");
+
+  // --- Controls ---
+  const groupSlider = must($("groupSlider"), "#groupSlider");
+  const groupValue = must($("groupValue"), "#groupValue");
+  const resetBtn = must($("resetBtn"), "#resetBtn");
+  const circleBtns = Array.from(document.querySelectorAll(".circle-btn"));
+
+  if (circleBtns.length === 0) {
+    console.error("❌ No encontré botones con clase .circle-btn");
   }
 
-  startFade() {
-    // Solo inicia fade si aún no está fading
-    if (!this.isFading) this.isFading = true;
+  // --- Mouse ---
+  const mouse = { x: -9999, y: -9999 };
+
+  // --- Config ---
+  const BASE_UP_MIN = 0.70;
+  const BASE_UP_MAX = 1.20;
+  const BASE_SIDE_MIN = 0.30;
+  const BASE_SIDE_MAX = 1.10;
+
+  const FADE_SPEED = 0.028;
+
+  // --- Game state ---
+  let circles = [];
+  let level = 1;
+
+  let groupSize = groupSlider ? Number(groupSlider.value) : 10;
+  let targetTotal = 100;
+
+  let totalSpawned = 0;
+  let removedTotal = 0;
+  let removedThisLevel = 0;
+
+  let escapedRemoved = 0;
+  let running = true;
+
+  function rand(min, max) { return Math.random() * (max - min) + min; }
+  function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+
+  function setStatus(msg) {
+    if (statusText) statusText.textContent = msg;
   }
 
-  update(speedScale) {
-    // Hover: SOLO cambia color (no afecta física)
-    this.isHovered = this.containsPoint(mouse.x, mouse.y);
+  function speedScaleByLevel() {
+    const scale = Math.pow(1.22, (level - 1));
+    return Math.min(scale, 6.0);
+  }
 
-    // Movimiento (se escala con nivel)
-    this.x += this.vx * speedScale;
-    this.y += this.vy * speedScale;
+  class Circle {
+    constructor() {
+      this.r = rand(16, 30);
+      this.x = rand(this.r + 4, canvas.width - this.r - 4);
+      this.y = canvas.height + this.r + rand(20, 160);
 
-    // Rebote lateral estricto
-    if (this.x - this.r <= 0) {
-      this.x = this.r;
-      this.vx *= -1;
-    } else if (this.x + this.r >= canvas.width) {
-      this.x = canvas.width - this.r;
-      this.vx *= -1;
+      this.vx = rand(BASE_SIDE_MIN, BASE_SIDE_MAX) * (Math.random() < 0.5 ? -1 : 1);
+      this.vy = -rand(BASE_UP_MIN, BASE_UP_MAX);
+
+      this.alpha = 1;
+      this.isFading = false;
+      this.isHovered = false;
+
+      this.baseColor = "rgba(64, 247, 255, 1)";
+      this.hoverColor = "rgba(255, 75, 210, 1)";
+      this.fadeColor  = "rgba(255, 228, 92, 1)";
     }
 
-    // Fade por clic
-    if (this.isFading) {
-      this.alpha -= FADE_SPEED;
-      this.alpha = clamp(this.alpha, 0, 1);
+    containsPoint(px, py) {
+      const dx = px - this.x;
+      const dy = py - this.y;
+      return (dx * dx + dy * dy) <= this.r * this.r;
+    }
+
+    startFade() { this.isFading = true; }
+
+    update(speedScale) {
+      this.isHovered = this.containsPoint(mouse.x, mouse.y);
+
+      this.x += this.vx * speedScale;
+      this.y += this.vy * speedScale;
+
+      // rebote lateral
+      if (this.x - this.r <= 0) { this.x = this.r; this.vx *= -1; }
+      if (this.x + this.r >= canvas.width) { this.x = canvas.width - this.r; this.vx *= -1; }
+
+      if (this.isFading) {
+        this.alpha -= FADE_SPEED;
+        this.alpha = clamp(this.alpha, 0, 1);
+      }
+    }
+
+    draw() {
+      ctx.save();
+      ctx.globalAlpha = this.alpha;
+
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
+
+      if (this.isFading) ctx.fillStyle = this.fadeColor;
+      else if (this.isHovered) ctx.fillStyle = this.hoverColor;
+      else ctx.fillStyle = this.baseColor;
+
+      ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = "rgba(255,255,255,0.22)";
+      ctx.stroke();
+
+      ctx.restore();
+    }
+
+    isOutTop() { return (this.y + this.r) < 0; }
+    isFaded() { return this.alpha <= 0; }
+  }
+
+  function spawnBatch() {
+    if (totalSpawned >= targetTotal) return;
+    const remaining = targetTotal - totalSpawned;
+    const toSpawn = Math.min(groupSize, remaining);
+
+    for (let i = 0; i < toSpawn; i++) {
+      circles.push(new Circle());
+      totalSpawned++;
     }
   }
 
-  draw() {
-    ctx.save();
-    ctx.globalAlpha = this.alpha;
+  function updateHUD() {
+    if (levelText) levelText.textContent = String(level);
+    if (aliveText) aliveText.textContent = String(circles.length);
+    if (removedText) removedText.textContent = String(removedTotal);
 
-    ctx.beginPath();
-    ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
+    const removedPct = targetTotal ? (removedTotal / targetTotal) * 100 : 0;
+    if (percentRemovedText) percentRemovedText.textContent = `${removedPct.toFixed(1)}%`;
 
-    ctx.fillStyle = this.isHovered ? this.hoverColor : this.baseColor;
-    ctx.fill();
+    if (levelProgressText) levelProgressText.textContent = `${removedThisLevel}/${groupSize}`;
+    if (targetText) targetText.textContent = String(targetTotal);
 
-    // Borde suave
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = "rgba(255,255,255,0.20)";
-    ctx.stroke();
-
-    ctx.restore();
+    if (escapedText) escapedText.textContent = String(escapedRemoved);
+    const escapedPct = targetTotal ? (escapedRemoved / targetTotal) * 100 : 0;
+    if (percentEscapedText) percentEscapedText.textContent = `${escapedPct.toFixed(1)}%`;
   }
 
-  // Se elimina si:
-  // 1) Ya desapareció por fade
-  // 2) Salió por arriba completamente (estricto)
-  shouldRemove() {
-    const outTop = (this.y + this.r) < 0;
-    const faded = this.alpha <= 0;
-    return outTop || faded;
+  function nextLevelIfNeeded() {
+    if (removedThisLevel >= groupSize) {
+      level++;
+      removedThisLevel = 0;
+      spawnBatch();
+      setStatus(`Nivel ${level} • velocidad x${speedScaleByLevel().toFixed(2)}`);
+    }
   }
-}
 
-function spawnLevelBatch() {
-  // Genera un grupo de 10 para el nivel actual
-  for (let i = 0; i < LEVEL_SIZE; i++) {
-    circles.push(new Circle());
-    totalSpawned++;
-  }
-}
+  function resetGame() {
+    circles = [];
+    level = 1;
+    groupSize = groupSlider ? Number(groupSlider.value) : groupSize;
 
-function updateHUD() {
-  levelText.textContent = String(level);
-  removedText.textContent = String(removedTotal);
-
-  const percent = totalSpawned === 0 ? 0 : (removedTotal / totalSpawned) * 100;
-  percentText.textContent = `${percent.toFixed(1)}%`;
-
-  levelProgressText.textContent = `${removedThisLevel}/${LEVEL_SIZE}`;
-  aliveText.textContent = String(circles.length);
-}
-
-function nextLevelIfNeeded() {
-  if (removedThisLevel >= LEVEL_SIZE) {
-    // Subimos nivel y generamos otros 10
-    level++;
+    totalSpawned = 0;
+    removedTotal = 0;
     removedThisLevel = 0;
-    spawnLevelBatch();
-  }
-}
+    escapedRemoved = 0;
 
-function speedScaleByLevel() {
-  // Cada nivel incrementa un poco la velocidad
-  // Nivel 1 = 1.00, Nivel 2 = 1.12, Nivel 3 = 1.24, etc.
-  return 1 + (level - 1) * 0.12;
-}
+    running = true;
 
-// Eventos mouse
-canvas.addEventListener("mousemove", (e) => {
-  const rect = canvas.getBoundingClientRect();
-  const scaleX = canvas.width / rect.width;
-  const scaleY = canvas.height / rect.height;
-
-  mouse.x = (e.clientX - rect.left) * scaleX;
-  mouse.y = (e.clientY - rect.top) * scaleY;
-});
-
-canvas.addEventListener("mouseleave", () => {
-  mouse.x = -9999;
-  mouse.y = -9999;
-});
-
-canvas.addEventListener("click", () => {
-  // Al clic: si está sobre un círculo, empieza fade lentamente
-  // (Tomamos el círculo "más arriba" en la lista para evitar doble clic raro)
-  for (let i = circles.length - 1; i >= 0; i--) {
-    if (circles[i].containsPoint(mouse.x, mouse.y)) {
-      circles[i].startFade();
-      break;
-    }
-  }
-});
-
-// Loop principal
-function loop() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  const speedScale = speedScaleByLevel();
-
-  // Actualiza y dibuja
-  for (const c of circles) {
-    c.update(speedScale);
-    c.draw();
+    spawnBatch();
+    updateHUD();
+    setStatus("Reiniciado.");
   }
 
-  // Remoción estricta (por arriba o por fade)
-  // Contabiliza eliminados
-  let removedNow = 0;
-  circles = circles.filter((c) => {
-    if (c.shouldRemove()) {
-      removedNow++;
-      return false;
-    }
-    return true;
+  // --- Events ---
+  canvas.addEventListener("mousemove", (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    mouse.x = (e.clientX - rect.left) * scaleX;
+    mouse.y = (e.clientY - rect.top) * scaleY;
   });
 
-  if (removedNow > 0) {
-    removedTotal += removedNow;
-    removedThisLevel += removedNow;
-    nextLevelIfNeeded();
+  canvas.addEventListener("mouseleave", () => {
+    mouse.x = -9999; mouse.y = -9999;
+  });
+
+  canvas.addEventListener("click", () => {
+    for (let i = circles.length - 1; i >= 0; i--) {
+      if (circles[i].containsPoint(mouse.x, mouse.y)) {
+        circles[i].startFade();
+        break;
+      }
+    }
+  });
+
+  if (groupSlider) {
+    groupSlider.addEventListener("input", () => {
+      groupSize = Number(groupSlider.value);
+      if (groupValue) groupValue.textContent = String(groupSize);
+      updateHUD();
+      setStatus(`Grupo por nivel: ${groupSize}`);
+    });
   }
 
-  updateHUD();
-  requestAnimationFrame(loop);
-}
+  circleBtns.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      circleBtns.forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      targetTotal = Number(btn.dataset.target);
+      resetGame();
+      setStatus(`Objetivo total: ${targetTotal}`);
+    });
+  });
 
-// Inicio
-spawnLevelBatch(); // Nivel 1: 10 elementos
-updateHUD();
-loop();
+  if (circleBtns[0]) circleBtns[0].classList.add("active");
+
+  if (resetBtn) resetBtn.addEventListener("click", resetGame);
+
+  // --- Loop ---
+  function loop() {
+    if (!running) return;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const speedScale = speedScaleByLevel();
+
+    for (const c of circles) {
+      c.update(speedScale);
+      c.draw();
+    }
+
+    circles = circles.filter((c) => {
+      if (c.isFaded()) {
+        removedTotal++;
+        removedThisLevel++;
+        return false;
+      }
+      if (c.isOutTop()) {
+        removedTotal++;
+        removedThisLevel++;
+        escapedRemoved++;
+        return false;
+      }
+      return true;
+    });
+
+    nextLevelIfNeeded();
+
+    if (totalSpawned >= targetTotal && circles.length === 0) {
+      running = false;
+      setStatus(`FIN • eliminados: ${removedTotal}/${targetTotal} • escaparon: ${escapedRemoved}`);
+      updateHUD();
+      return;
+    }
+
+    updateHUD();
+    requestAnimationFrame(loop);
+  }
+
+  // --- Start ---
+  if (groupValue) groupValue.textContent = String(groupSize);
+  spawnBatch();
+  updateHUD();
+  setStatus("Listo. Si no ves círculos: revisa Console (F12).");
+  console.log("✅ Juego iniciado. Si algo falla, aquí verás el error.");
+  requestAnimationFrame(loop);
+});
