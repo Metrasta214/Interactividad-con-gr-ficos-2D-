@@ -1,5 +1,4 @@
 document.addEventListener("DOMContentLoaded", () => {
-  // Helpers
   const $ = (id) => document.getElementById(id);
   const must = (el, name) => {
     if (!el) console.error(`❌ No encontré el elemento: ${name}`);
@@ -9,15 +8,14 @@ document.addEventListener("DOMContentLoaded", () => {
   // Canvas
   const canvas = must($("gameCanvas"), "canvas#gameCanvas");
   if (!canvas) return;
-
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
 
   // HUD
   const levelText = must($("levelText"), "#levelText");
   const aliveText = must($("aliveText"), "#aliveText");
-  const removedText = must($("removedText"), "#removedText");
-  const percentRemovedText = must($("percentRemovedText"), "#percentRemovedText");
+  const removedText = must($("removedText"), "#removedText"); // <- SOLO click
+  const percentRemovedText = must($("percentRemovedText"), "#percentRemovedText"); // <- SOLO click
   const levelProgressText = must($("levelProgressText"), "#levelProgressText");
   const targetText = must($("targetText"), "#targetText");
   const escapedText = must($("escapedText"), "#escapedText");
@@ -39,12 +37,15 @@ document.addEventListener("DOMContentLoaded", () => {
   const BASE_SIDE_MIN = 0.30;
   const BASE_SIDE_MAX = 1.10;
 
-  // Fade out
+  // Fade
   const FADE_SPEED = 0.028;
 
-  // Física colisiones
-  const RESTITUTION = 0.98; // 1.0 rebote perfecto, <1 pierde un poquito
-  const SEPARATION_SLOP = 0.01; // evita vibración numérica
+  // Colisiones
+  const RESTITUTION = 0.98;
+  const SEPARATION_SLOP = 0.01;
+
+  // Rebotes en límites
+  const WALL_RESTITUTION = 0.98;
 
   // Estado
   let circles = [];
@@ -54,10 +55,11 @@ document.addEventListener("DOMContentLoaded", () => {
   let targetTotal = 100;
   let totalSpawned = 0;
 
-  let removedTotal = 0;
-  let removedThisLevel = 0;
+  // ✅ Contadores separados
+  let clickedRemoved = 0;   // eliminados por click
+  let escapedRemoved = 0;   // escaparon por arriba
+  let removedThisLevel = 0; // progreso de nivel (click + escape)
 
-  let escapedRemoved = 0;
   let running = true;
 
   // Utils
@@ -68,7 +70,6 @@ document.addEventListener("DOMContentLoaded", () => {
     if (statusText) statusText.textContent = msg;
   }
 
-  // Velocidad por nivel (más rápido cada nivel)
   function speedScaleByLevel() {
     const scale = Math.pow(1.22, (level - 1));
     return Math.min(scale, 6.0);
@@ -81,7 +82,7 @@ document.addEventListener("DOMContentLoaded", () => {
       this.y = canvas.height + this.r + rand(20, 160);
 
       this.vx = rand(BASE_SIDE_MIN, BASE_SIDE_MAX) * (Math.random() < 0.5 ? -1 : 1);
-      this.vy = -rand(BASE_UP_MIN, BASE_UP_MAX);
+      this.vy = -rand(BASE_UP_MIN, BASE_UP_MAX); // hacia arriba
 
       this.alpha = 1;
       this.isFading = false;
@@ -106,21 +107,29 @@ document.addEventListener("DOMContentLoaded", () => {
       // Hover SOLO color
       this.isHovered = this.containsPoint(mouse.x, mouse.y);
 
-      // Movimiento (no multiplicamos por speedScale a la velocidad en sí,
-      // sino al desplazamiento para conservar el "look" original)
+      // Movimiento
       this.x += this.vx * speedScale;
       this.y += this.vy * speedScale;
 
       // Rebote lateral estricto
       if (this.x - this.r <= 0) {
         this.x = this.r;
-        this.vx *= -1;
+        this.vx *= -WALL_RESTITUTION;
       } else if (this.x + this.r >= canvas.width) {
         this.x = canvas.width - this.r;
-        this.vx *= -1;
+        this.vx *= -WALL_RESTITUTION;
       }
 
-      // Fade por clic
+      // ✅ Rebote inferior (SUELO) — NO desaparecer por abajo
+      if (this.y + this.r >= canvas.height) {
+        this.y = canvas.height - this.r;
+        this.vy *= -WALL_RESTITUTION;
+
+        // Asegura que tras rebotar no se quede “pegado” bajando
+        if (this.vy > 0) this.vy *= -1;
+      }
+
+      // Fade por click
       if (this.isFading) {
         this.alpha -= FADE_SPEED;
         this.alpha = clamp(this.alpha, 0, 1);
@@ -148,6 +157,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     isOutTop() {
+      // ✅ Solo desaparecen por arriba (escape)
       return (this.y + this.r) < 0;
     }
 
@@ -171,9 +181,10 @@ document.addEventListener("DOMContentLoaded", () => {
   function updateHUD() {
     if (levelText) levelText.textContent = String(level);
     if (aliveText) aliveText.textContent = String(circles.length);
-    if (removedText) removedText.textContent = String(removedTotal);
 
-    const removedPct = targetTotal ? (removedTotal / targetTotal) * 100 : 0;
+    // ✅ Eliminados SOLO click
+    if (removedText) removedText.textContent = String(clickedRemoved);
+    const removedPct = targetTotal ? (clickedRemoved / targetTotal) * 100 : 0;
     if (percentRemovedText) percentRemovedText.textContent = `${removedPct.toFixed(1)}%`;
 
     if (levelProgressText) levelProgressText.textContent = `${removedThisLevel}/${groupSize}`;
@@ -199,9 +210,9 @@ document.addEventListener("DOMContentLoaded", () => {
     groupSize = groupSlider ? Number(groupSlider.value) : groupSize;
 
     totalSpawned = 0;
-    removedTotal = 0;
-    removedThisLevel = 0;
+    clickedRemoved = 0;
     escapedRemoved = 0;
+    removedThisLevel = 0;
 
     running = true;
 
@@ -210,10 +221,9 @@ document.addEventListener("DOMContentLoaded", () => {
     setStatus("Reiniciado (colisiones ON).");
   }
 
-  /* =========================================================
-     COLISIONES CÍRCULO-CÍRCULO (rebote elástico + separación)
-     - Se ignoran los que están en fade (para evitar “pegote”)
-     ========================================================= */
+  // =========================
+  // COLISIONES CÍRCULO-CÍRCULO
+  // =========================
   function resolveCollisions() {
     for (let i = 0; i < circles.length; i++) {
       const a = circles[i];
@@ -226,18 +236,15 @@ document.addEventListener("DOMContentLoaded", () => {
         const dx = b.x - a.x;
         const dy = b.y - a.y;
         const rSum = a.r + b.r;
-
         const dist2 = dx * dx + dy * dy;
+
         if (dist2 >= rSum * rSum) continue;
 
-        // Si están exactamente encima, evita división entre 0
         const dist = Math.sqrt(dist2) || 0.0001;
-
-        // Normal unitario
         const nx = dx / dist;
         const ny = dy / dist;
 
-        // 1) Separar para que no se encimen (penetration resolution)
+        // Separación
         const overlap = rSum - dist;
         const sep = (overlap / 2) + SEPARATION_SLOP;
 
@@ -246,18 +253,13 @@ document.addEventListener("DOMContentLoaded", () => {
         b.x += nx * sep;
         b.y += ny * sep;
 
-        // 2) Rebote elástico (masas iguales)
-        // velocidad relativa sobre la normal
+        // Impulso elástico (masas iguales)
         const rvx = b.vx - a.vx;
         const rvy = b.vy - a.vy;
         const velAlongNormal = rvx * nx + rvy * ny;
-
-        // Si ya se están separando, no aplicar impulso
         if (velAlongNormal > 0) continue;
 
-        // Impulso para masas iguales m=1
         const jImpulse = -(1 + RESTITUTION) * velAlongNormal / 2;
-
         const ix = jImpulse * nx;
         const iy = jImpulse * ny;
 
@@ -266,10 +268,11 @@ document.addEventListener("DOMContentLoaded", () => {
         b.vx += ix;
         b.vy += iy;
 
-        // 3) Asegurar que sigan subiendo (vy debe permanecer hacia arriba)
-        // (si por choque se vuelve positiva, la “re-corrigimos” un poco)
-        if (a.vy > 0) a.vy *= -0.8;
-        if (b.vy > 0) b.vy *= -0.8;
+        // ✅ IMPORTANTE: si por choque quedan bajando, el suelo ya los rebota,
+        // pero evitamos que se vayan demasiado hacia abajo:
+        // (pequeña corrección para mantener tendencia hacia arriba)
+        if (a.vy > 1.8) a.vy = 1.8;
+        if (b.vy > 1.8) b.vy = 1.8;
       }
     }
   }
@@ -327,26 +330,27 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const speedScale = speedScaleByLevel();
 
-    // 1) Actualizar posiciones
+    // Update
     for (const c of circles) c.update(speedScale);
 
-    // 2) Resolver colisiones entre círculos (después del update)
+    // Collisions
     resolveCollisions();
 
-    // 3) Dibujar
+    // Draw
     for (const c of circles) c.draw();
 
-    // 4) Eliminar (fade o escape por arriba)
+    // Remove only by:
+    // - click fade (counts as Eliminados)
+    // - out top (counts as Escaparon)
     circles = circles.filter((c) => {
       if (c.isFaded()) {
-        removedTotal++;
-        removedThisLevel++;
+        clickedRemoved++;      // ✅ solo click
+        removedThisLevel++;    // progreso de nivel
         return false;
       }
       if (c.isOutTop()) {
-        removedTotal++;
-        removedThisLevel++;
-        escapedRemoved++;
+        escapedRemoved++;      // ✅ solo escape
+        removedThisLevel++;    // progreso de nivel
         return false;
       }
       return true;
@@ -354,10 +358,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
     nextLevelIfNeeded();
 
-    // Fin
-    if (totalSpawned >= targetTotal && circles.length === 0) {
+    // Fin cuando ya procesaste todos (click+escape) y no queda nada en pantalla
+    const processedTotal = clickedRemoved + escapedRemoved;
+    if (totalSpawned >= targetTotal && circles.length === 0 && processedTotal >= targetTotal) {
       running = false;
-      setStatus(`FIN • eliminados: ${removedTotal}/${targetTotal} • escaparon: ${escapedRemoved}`);
+      setStatus(`FIN • click: ${clickedRemoved}/${targetTotal} • escaparon: ${escapedRemoved}`);
       updateHUD();
       return;
     }
@@ -370,6 +375,6 @@ document.addEventListener("DOMContentLoaded", () => {
   if (groupValue) groupValue.textContent = String(groupSize);
   spawnBatch();
   updateHUD();
-  setStatus("Listo. Colisiones ON.");
+  setStatus("Listo. Colisiones ON. Eliminados = solo click. Escaparon = arriba.");
   requestAnimationFrame(loop);
 });
