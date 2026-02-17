@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Juego Canvas - Colisiones Mouse</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <header class="topbar">
+    <h1>Canvas Game: Hover + Click Fade + Niveles</h1>
+    <p>Pasa el mouse para cambiar color. Haz clic para desaparecerlos.</p>
+  </header>
+
+  <main class="container">
+    <section class="hud">
+      <div class="hud-item">
+        <span class="label">Nivel</span>
+        <span id="levelText" class="value">1</span>
+      </div>
+
+      <div class="hud-item">
+        <span class="label">Eliminados</span>
+        <span id="removedText" class="value">0</span>
+      </div>
+
+      <div class="hud-item">
+        <span class="label">% Eliminados</span>
+        <span id="percentText" class="value">0%</span>
+      </div>
+
+      <div class="hud-item">
+        <span class="label">Progreso nivel</span>
+        <span id="levelProgressText" class="value">0/10</span>
+      </div>
+
+      <div class="hud-item">
+        <span class="label">En pantalla</span>
+        <span id="aliveText" class="value">10</span>
+      </div>
+    </section>
+
+    <section class="stage">
+      <canvas id="gameCanvas" width="980" height="520"></canvas>
+      <div class="tips">
+        <strong>Reglas:</strong> salen desde abajo, suben, rebotan en laterales; si salen por arriba, se eliminan.
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <small>Álvaro • Canvas + JS • Versión tipo juego</small>
+  </footer>
+
+  <script src="game.js"></script>
+</body>
+</html>
