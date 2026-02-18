@@ -22,20 +22,16 @@ document.addEventListener("DOMContentLoaded", () => {
   const levelText = must($("levelText"), "#levelText");
   const aliveText = must($("aliveText"), "#aliveText");
 
-  // Eliminados SOLO click
-  const removedText = must($("removedText"), "#removedText");
+  const removedText = must($("removedText"), "#removedText"); // SOLO click
   const percentRemovedText = must($("percentRemovedText"), "#percentRemovedText");
 
   const levelProgressText = must($("levelProgressText"), "#levelProgressText");
   const targetText = must($("targetText"), "#targetText");
 
-  // Escaparon SOLO arriba
   const escapedText = must($("escapedText"), "#escapedText");
   const percentEscapedText = must($("percentEscapedText"), "#percentEscapedText");
 
   const statusText = must($("statusText"), "#statusText");
-
-  // Para animación HUD (aplica clase al panel completo)
   const hudPanel = document.querySelector(".hud");
 
   // =========================================================
@@ -45,12 +41,10 @@ document.addEventListener("DOMContentLoaded", () => {
   const groupValue = must($("groupValue"), "#groupValue");
   const resetBtn = must($("resetBtn"), "#resetBtn");
   const circleBtns = Array.from(document.querySelectorAll(".circle-btn"));
-
-  // Audio button (opcional, recomendado en navbar)
-  const audioBtn = $("audioBtn");
+  const audioBtn = $("audioBtn"); // opcional
 
   // =========================================================
-  // GAME OVER OVERLAY (debe existir en index.html)
+  // GAME OVER OVERLAY
   // =========================================================
   const gameOver = $("gameOver");
   const gameOverMsg = $("gameOverMsg");
@@ -62,9 +56,10 @@ document.addEventListener("DOMContentLoaded", () => {
   const overlayBtns = Array.from(document.querySelectorAll(".overlay-btn"));
 
   // =========================================================
-  // MOUSE
+  // MOUSE + CROSSHAIR
   // =========================================================
   const mouse = { x: -9999, y: -9999 };
+  let mouseInside = false;
 
   // =========================================================
   // CONFIG
@@ -88,24 +83,16 @@ document.addEventListener("DOMContentLoaded", () => {
   const SHAKE_DECAY = 0.86;
 
   // =========================================================
-  // AUDIO (Web Audio API) – chiptune + explosion
+  // AUDIO (Web Audio API)
   // =========================================================
   let audioCtx = null;
   let musicOn = false;
   let musicTimer = null;
 
-  // Secuencia simple tipo 8-bit (melodía y bajo)
-  // (Notas en semitonos respecto a A4=440Hz)
   const BPM = 120;
-  const STEP_MS = (60_000 / BPM) / 2; // corcheas
-  const melody = [
-    0,  0,  7,  7,  9,  9,  7, null,
-    5,  5,  4,  4,  2,  2,  0, null
-  ];
-  const bass = [
-    -12, null, -12, null, -17, null, -17, null,
-    -19, null, -19, null, -24, null, -24, null
-  ];
+  const STEP_MS = (60_000 / BPM) / 2;
+  const melody = [0, 0, 7, 7, 9, 9, 7, null, 5, 5, 4, 4, 2, 2, 0, null];
+  const bass   = [-12, null, -12, null, -17, null, -17, null, -19, null, -19, null, -24, null, -24, null];
 
   function semitoneToFreq(semi, base = 440) {
     return base * Math.pow(2, semi / 12);
@@ -113,7 +100,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function ensureAudio() {
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    // algunos navegadores inician "suspended"
     if (audioCtx.state === "suspended") audioCtx.resume();
   }
 
@@ -128,7 +114,6 @@ document.addEventListener("DOMContentLoaded", () => {
     osc.frequency.setValueAtTime(freq, t);
     osc.detune.setValueAtTime(detune, t);
 
-    // Envelope rápido (8-bit feel)
     g.gain.setValueAtTime(0.0001, t);
     g.gain.exponentialRampToValueAtTime(gain, t + 0.005);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
@@ -142,7 +127,6 @@ document.addEventListener("DOMContentLoaded", () => {
     ensureAudio();
     const t = audioCtx.currentTime;
 
-    // Ruido blanco corto
     const bufferSize = audioCtx.sampleRate * 0.12;
     const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
     const data = buffer.getChannelData(0);
@@ -156,7 +140,6 @@ document.addEventListener("DOMContentLoaded", () => {
     noiseGain.gain.exponentialRampToValueAtTime(0.18, t + 0.01);
     noiseGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.12);
 
-    // “Punch” con square descendente
     const boom = audioCtx.createOscillator();
     boom.type = "square";
     boom.frequency.setValueAtTime(160, t);
@@ -175,7 +158,6 @@ document.addEventListener("DOMContentLoaded", () => {
     boom.start(t);
     boom.stop(t + 0.14);
 
-    // “chirp” extra tipo arcade
     playBeep({ freq: 880, dur: 0.05, type: "square", gain: 0.04, detune: -18 });
     playBeep({ freq: 660, dur: 0.06, type: "square", gain: 0.03, detune: +12 });
   }
@@ -193,13 +175,8 @@ document.addEventListener("DOMContentLoaded", () => {
       const m = melody[step % melody.length];
       const b = bass[step % bass.length];
 
-      if (m !== null) {
-        // base A4=440, m en semitonos
-        playBeep({ freq: semitoneToFreq(m, 440), dur: 0.09, type: "square", gain: 0.035 });
-      }
-      if (b !== null) {
-        playBeep({ freq: semitoneToFreq(b, 440), dur: 0.11, type: "square", gain: 0.03, detune: -8 });
-      }
+      if (m !== null) playBeep({ freq: semitoneToFreq(m, 440), dur: 0.09, type: "square", gain: 0.035 });
+      if (b !== null) playBeep({ freq: semitoneToFreq(b, 440), dur: 0.11, type: "square", gain: 0.03, detune: -8 });
 
       step++;
     }, STEP_MS);
@@ -227,7 +204,6 @@ document.addEventListener("DOMContentLoaded", () => {
   // =========================================================
   let circles = [];
   let particles = [];
-
   let level = 1;
   let groupSize = groupSlider ? Number(groupSlider.value) : 10;
 
@@ -239,8 +215,6 @@ document.addEventListener("DOMContentLoaded", () => {
   let removedThisLevel = 0;
 
   let running = true;
-
-  // Screen shake
   let shake = 0;
 
   // =========================================================
@@ -261,13 +235,85 @@ document.addEventListener("DOMContentLoaded", () => {
   function pulseHUD() {
     if (!hudPanel) return;
     hudPanel.classList.remove("hud-pulse");
-    // reflow para re-disparar animación
     void hudPanel.offsetWidth;
     hudPanel.classList.add("hud-pulse");
   }
 
   // =========================================================
-  // PARTICLES (explosion animation)
+  // CROSSHAIR DRAW
+  // =========================================================
+  function drawCrosshair() {
+    if (!mouseInside) return;
+
+    const x = mouse.x;
+    const y = mouse.y;
+
+    // Evita dibujar fuera (por si acaso)
+    if (x < 0 || y < 0 || x > canvas.width || y > canvas.height) return;
+
+    ctx.save();
+
+    // brillo retro
+    ctx.globalAlpha = 0.95;
+
+    // círculos y líneas
+    const r1 = 10;
+    const r2 = 18;
+    const gap = 6;
+
+    // anillo externo
+    ctx.beginPath();
+    ctx.arc(x, y, r2, 0, Math.PI * 2);
+    ctx.strokeStyle = "rgba(64,247,255,0.75)";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // anillo interno
+    ctx.beginPath();
+    ctx.arc(x, y, r1, 0, Math.PI * 2);
+    ctx.strokeStyle = "rgba(255,75,210,0.7)";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // cruz (arriba/abajo/izq/der) con hueco central
+    ctx.strokeStyle = "rgba(255,255,255,0.85)";
+    ctx.lineWidth = 2;
+
+    // arriba
+    ctx.beginPath();
+    ctx.moveTo(x, y - r2 - 8);
+    ctx.lineTo(x, y - gap);
+    ctx.stroke();
+
+    // abajo
+    ctx.beginPath();
+    ctx.moveTo(x, y + gap);
+    ctx.lineTo(x, y + r2 + 8);
+    ctx.stroke();
+
+    // izquierda
+    ctx.beginPath();
+    ctx.moveTo(x - r2 - 8, y);
+    ctx.lineTo(x - gap, y);
+    ctx.stroke();
+
+    // derecha
+    ctx.beginPath();
+    ctx.moveTo(x + gap, y);
+    ctx.lineTo(x + r2 + 8, y);
+    ctx.stroke();
+
+    // punto central
+    ctx.beginPath();
+    ctx.arc(x, y, 2.2, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(255,228,92,0.9)";
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  // =========================================================
+  // PARTICLES
   // =========================================================
   function spawnExplosion(x, y) {
     for (let i = 0; i < PARTICLE_COUNT; i++) {
@@ -303,7 +349,6 @@ document.addEventListener("DOMContentLoaded", () => {
       ctx.globalAlpha = a;
       ctx.beginPath();
       ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-      // sin fijar color: usamos blanco brillante (neón)
       ctx.fillStyle = "rgba(255,255,255,1)";
       ctx.fill();
       ctx.restore();
@@ -317,8 +362,6 @@ document.addEventListener("DOMContentLoaded", () => {
     constructor() {
       this.r = rand(16, 30);
       this.x = rand(this.r + 4, canvas.width - this.r - 4);
-
-      // nace fuera por abajo
       this.y = canvas.height + this.r + rand(20, 160);
 
       this.vx = rand(BASE_SIDE_MIN, BASE_SIDE_MAX) * (Math.random() < 0.5 ? -1 : 1);
@@ -328,7 +371,6 @@ document.addEventListener("DOMContentLoaded", () => {
       this.isFading = false;
       this.isHovered = false;
 
-      // anim spawn “pop”
       this.spawnScale = 0.15;
 
       this.baseColor = "rgba(64, 247, 255, 1)";
@@ -342,9 +384,7 @@ document.addEventListener("DOMContentLoaded", () => {
       return (dx * dx + dy * dy) <= this.r * this.r;
     }
 
-    startFade() {
-      this.isFading = true;
-    }
+    startFade() { this.isFading = true; }
 
     update(speedScale) {
       this.isHovered = this.containsPoint(mouse.x, mouse.y);
@@ -352,7 +392,6 @@ document.addEventListener("DOMContentLoaded", () => {
       this.x += this.vx * speedScale;
       this.y += this.vy * speedScale;
 
-      // rebote laterales
       if (this.x - this.r <= 0) {
         this.x = this.r;
         this.vx *= -WALL_RESTITUTION;
@@ -361,20 +400,17 @@ document.addEventListener("DOMContentLoaded", () => {
         this.vx *= -WALL_RESTITUTION;
       }
 
-      // rebote suelo
       if (this.y + this.r >= canvas.height) {
         this.y = canvas.height - this.r;
         this.vy *= -WALL_RESTITUTION;
         if (this.vy > 0) this.vy *= -1;
       }
 
-      // fade
       if (this.isFading) {
         this.alpha -= FADE_SPEED;
         this.alpha = clamp(this.alpha, 0, 1);
       }
 
-      // spawn pop anim
       this.spawnScale = Math.min(1, this.spawnScale + 0.06);
     }
 
@@ -382,7 +418,6 @@ document.addEventListener("DOMContentLoaded", () => {
       ctx.save();
       ctx.globalAlpha = this.alpha;
 
-      // “pop” visual
       const rr = this.r * this.spawnScale;
 
       ctx.beginPath();
@@ -401,13 +436,8 @@ document.addEventListener("DOMContentLoaded", () => {
       ctx.restore();
     }
 
-    isOutTop() {
-      return (this.y + this.r) < 0;
-    }
-
-    isFaded() {
-      return this.alpha <= 0;
-    }
+    isOutTop() { return (this.y + this.r) < 0; }
+    isFaded() { return this.alpha <= 0; }
   }
 
   // =========================================================
@@ -497,7 +527,7 @@ document.addEventListener("DOMContentLoaded", () => {
       level++;
       removedThisLevel = 0;
       spawnBatch();
-      setStatus(`Nivel ${level}/${MAX_LEVELS} • velocidad x${speedScaleByLevel().toFixed(2)} • audio/FX ON`);
+      setStatus(`Nivel ${level}/${MAX_LEVELS} • velocidad x${speedScaleByLevel().toFixed(2)}`);
     }
   }
 
@@ -522,7 +552,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // =========================================================
-  // COLLISIONS (circle-circle)
+  // COLLISIONS
   // =========================================================
   function resolveCollisions() {
     for (let i = 0; i < circles.length; i++) {
@@ -543,7 +573,6 @@ document.addEventListener("DOMContentLoaded", () => {
         const nx = dx / dist;
         const ny = dy / dist;
 
-        // Separación
         const overlap = rSum - dist;
         const sep = overlap / 2 + SEPARATION_SLOP;
         a.x -= nx * sep;
@@ -551,7 +580,6 @@ document.addEventListener("DOMContentLoaded", () => {
         b.x += nx * sep;
         b.y += ny * sep;
 
-        // Impulso
         const rvx = b.vx - a.vx;
         const rvy = b.vy - a.vy;
         const velAlongNormal = rvx * nx + rvy * ny;
@@ -581,45 +609,34 @@ document.addEventListener("DOMContentLoaded", () => {
     const scaleY = canvas.height / rect.height;
     mouse.x = (e.clientX - rect.left) * scaleX;
     mouse.y = (e.clientY - rect.top) * scaleY;
+    mouseInside = true;
   });
 
   canvas.addEventListener("mouseleave", () => {
     mouse.x = -9999;
     mouse.y = -9999;
+    mouseInside = false;
   });
 
-  // ✅ Primer gesto del usuario: inicia audio si aún no está
-  function userGestureInitAudio() {
+  // permitir inicializar audio con gesto
+  canvas.addEventListener("pointerdown", () => {
     if (!audioCtx) ensureAudio();
-    // No forzamos música si no hay botón, pero si quieres autoplay con gesto:
-    // startMusic();
-  }
-
-  canvas.addEventListener("pointerdown", userGestureInitAudio, { once: true });
+  }, { once: true });
 
   canvas.addEventListener("click", () => {
-    // (si no hay botón, primer click puede iniciar música opcionalmente)
-    // startMusic();
-
-    // Click: inicia fade + SFX + partículas
     for (let i = circles.length - 1; i >= 0; i--) {
       const c = circles[i];
       if (c.containsPoint(mouse.x, mouse.y)) {
         c.startFade();
-
-        // SFX + VFX
         playExplosionSFX();
         spawnExplosion(c.x, c.y);
         pulseHUD();
-
         break;
       }
     }
   });
 
-  if (audioBtn) {
-    audioBtn.addEventListener("click", () => toggleMusic());
-  }
+  if (audioBtn) audioBtn.addEventListener("click", toggleMusic);
 
   if (groupSlider) {
     groupSlider.addEventListener("input", () => {
@@ -642,7 +659,6 @@ document.addEventListener("DOMContentLoaded", () => {
       setStatus(`Objetivo total: ${targetTotal}`);
     });
   });
-
   if (circleBtns[0]) circleBtns[0].classList.add("active");
 
   if (resetBtn) {
@@ -676,7 +692,7 @@ document.addEventListener("DOMContentLoaded", () => {
   function loop() {
     if (!running) return;
 
-    // Screen shake
+    // screen shake
     let sx = 0, sy = 0;
     if (shake > 0.2) {
       sx = (Math.random() * 2 - 1) * shake;
@@ -692,21 +708,21 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const speedScale = speedScaleByLevel();
 
-    // Update circles
+    // update circles
     for (const c of circles) c.update(speedScale);
 
-    // Collisions
+    // collisions
     resolveCollisions();
 
-    // Update particles
+    // update particles
     updateParticles();
 
-    // Draw (particles behind + circles + particles front)
+    // draw
     drawParticles();
     for (const c of circles) c.draw();
     drawParticles();
 
-    // Removals
+    // removals
     circles = circles.filter((c) => {
       if (c.isFaded()) {
         clickedRemoved++;
@@ -720,6 +736,9 @@ document.addEventListener("DOMContentLoaded", () => {
       }
       return true;
     });
+
+    // crosshair on top
+    drawCrosshair();
 
     ctx.restore();
 
@@ -736,6 +755,6 @@ document.addEventListener("DOMContentLoaded", () => {
   if (groupValue) groupValue.textContent = String(groupSize);
   spawnBatch();
   updateHUD();
-  setStatus(`Listo. Niveles: 1/${MAX_LEVELS}. Tip: Activa SOUND para música 8-bit.`);
+  setStatus(`Listo. Niveles: 1/${MAX_LEVELS}. Tip: SOUND para música 8-bit. Mira = cursor.`);
   requestAnimationFrame(loop);
 });

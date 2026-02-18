@@ -427,3 +427,9 @@ input[type="range"]{
 .hud-pulse {
   animation: hudPulse 220ms ease-out;
 }
+
+
+/* Cursor tipo mira SOLO en el canvas */
+#gameCanvas{
+  cursor: none;          /* oculta el cursor real */
+}
