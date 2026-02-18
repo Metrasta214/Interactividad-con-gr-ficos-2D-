@@ -417,3 +417,13 @@ input[type="range"]{
   cursor: not-allowed;
   filter: grayscale(1);
 }
+
+/* HUD pulse animation */
+@keyframes hudPulse {
+  0% { transform: scale(1); filter: brightness(1); }
+  40% { transform: scale(1.03); filter: brightness(1.2); }
+  100% { transform: scale(1); filter: brightness(1); }
+}
+.hud-pulse {
+  animation: hudPulse 220ms ease-out;
+}
